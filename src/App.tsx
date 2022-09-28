@@ -1,108 +1,76 @@
-import React from 'react'
+import React, { useEffect, useMemo } from 'react'
 import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
+  NativeEventEmitter,
+  NativeModules,
+  PermissionsAndroid,
   Text,
-  useColorScheme,
   View,
 } from 'react-native'
 import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen'
+  addOnErrorListener,
+  checkBluetoothAvailability,
+  checkBluetoothPermission,
+  connect,
+  publish,
+  subscribe,
+  useNearbySubscription,
+} from './NearbyLib'
 
-const Section: React.FC<{
-  title: string
-}> = ({ children, title }) => {
-  const isDarkMode = useColorScheme() === 'dark'
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}
-      >
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}
-      >
-        {children}
-      </Text>
-    </View>
-  )
+const { GoogleNearbyMessages } = NativeModules
+const nearbyEventEmitter = new NativeEventEmitter(GoogleNearbyMessages)
+
+const apiKey = 'AIzaSyA9OWEVaTV-MbLZJFgFGkk-axi4M98BQ_I'
+
+function removeAllListeners(event: any): void {
+  nearbyEventEmitter.removeAllListeners(event)
 }
 
 const App = () => {
-  const isDarkMode = useColorScheme() === 'dark'
+  // console.log({ GoogleNearbyMessages })
+  const nearbyConfig = useMemo(() => ({ apiKey }), [])
+  const { nearbyMessages, nearbyStatus } = useNearbySubscription(nearbyConfig)
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  }
+  console.log({ nearbyMessages, nearbyStatus })
+
+  useEffect(() => {
+    checkBluetoothPermission().then((hasPermission) => {
+      console.log({ hasPermission })
+      checkBluetoothAvailability().then((isBluetoothAvailable) => {
+        console.log({ isBluetoothAvailable })
+        if (hasPermission && isBluetoothAvailable) {
+          connect({ apiKey }).then(async () => {
+            const removeListener = addOnErrorListener((kind, message) =>
+              console.error(`${kind}: ${message}`)
+            )
+            subscribe(
+              (m) => {
+                console.log(`new message found: ${m}`)
+              },
+              (m) => {
+                console.log(`message lost: ${m}`)
+              }
+            )
+            await publish('hello !').then(() => console.log('publicou'))
+          })
+        }
+      })
+    })
+
+    return () => {
+      console.log('limpou')
+      GoogleNearbyMessages.unpublish()
+      GoogleNearbyMessages.unsubscribe()
+      GoogleNearbyMessages.disconnect()
+      removeAllListeners('MESSAGE_FOUND')
+      removeAllListeners('MESSAGE_LOST')
+    }
+  }, [])
 
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <ScrollView
-        contentInsetAdjustmentBehavior='automatic'
-        style={backgroundStyle}
-      >
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}
-        >
-          <Section title='Step One'>
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title='See Your Changes'>
-            <ReloadInstructions />
-          </Section>
-          <Section title='Debug'>
-            <DebugInstructions />
-          </Section>
-          <Section title='Learn More'>
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <View>
+      <Text>My app</Text>
+    </View>
   )
 }
-
-const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-})
 
 export default App
